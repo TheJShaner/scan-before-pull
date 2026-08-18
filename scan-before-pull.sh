@@ -40,11 +40,11 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 QUARANTINE="${SBP_QUARANTINE:-$SCRIPT_DIR/.quarantine}"
 SKILL_DIRS="${SBP_SKILL_DIRS:-$HOME/.claude/skills:$HOME/.agents/skills}"
-STRICT=0; ADVISORY=0; MODE="repo"; REPO=""; DEST=""; TARGET=""; MIN_SEV="MEDIUM"
+ADVISORY=0; MODE="repo"; REPO=""; DEST=""; TARGET=""; MIN_SEV="MEDIUM"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --strict)        STRICT=1; shift ;;   # now the default; accepted for compatibility
+    --strict)        shift ;;              # no-op: failing on findings is now the default
     --advisory)      ADVISORY=1; shift ;;  # downgrade sub-HIGH findings to exit 0
     --installed)     MODE="installed"; shift ;;
     --path)          MODE="path"; TARGET="${2:-}"; shift 2 ;;
@@ -321,6 +321,7 @@ done
 echo "# Scan Report: $(esc_md "$REPO")"
 echo "Date: $(date '+%Y-%m-%d %H:%M')  |  scan-before-pull v1.0.0"
 echo "Engines: skill-scanner (Cisco) + skillspector (NVIDIA) + gitleaks"
+[[ -n "$CLONED_SHA" ]] && echo "Scanned commit: \`$CLONED_SHA\`"
 echo ""
 
 ########################################

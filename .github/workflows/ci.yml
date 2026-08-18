@@ -55,8 +55,11 @@ jobs:
         run: |
           pipx install cisco-ai-skill-scanner
           pipx install git+https://github.com/NVIDIA/skillspector.git
-          curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/scripts/install.sh \
-            | sh -s -- -b /usr/local/bin
+          # Pinned release tarball. The upstream install.sh path 404s, and a CI that
+          # installs "latest" can break on someone else's release schedule.
+          GL_VER=8.30.1
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GL_VER}/gitleaks_${GL_VER}_linux_x64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin gitleaks
           skill-scanner --version && skillspector --version && gitleaks version
 
       - name: Benign fixture is not flagged HIGH
