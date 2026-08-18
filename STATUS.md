@@ -23,23 +23,30 @@ Tested on this machine, real runs, not assumed:
 - Preflight refuses to run when an engine is missing.
 - Stale quarantine clone removed and re-cloned fresh on re-run.
 
+- **CI is green** (run 32091851323 → fixed in the next push; all three jobs pass):
+  shellcheck clean, the no-engines job confirms it refuses rather than partially
+  scanning, and the fixture jobs confirm findings always reach the flagged list.
+  CI caught two real defects on its first run — a 404ing gitleaks install URL and
+  two dead variables — which is the whole reason it exists.
+- Linux path now exercised on every push (ubuntu-latest), not just macOS.
+
 ## NOT verified
 
-- **The CI workflow has never executed.** GitHub Actions has not run once. The
-  shellcheck job, the no-engines fail-closed job, and the fixture jobs are all
-  written-but-untested. Assume at least one YAML or assertion bug.
-- `shellcheck` is not installed locally, so the script has never been linted at all.
-- Portability fallbacks (perl/python unicode sweep, no-`--null` grep path) are coded
-  but only the macOS/ugrep path has actually run.
+- Portability fallbacks for hosts without PCRE (`perl`/`python` unicode sweep) and
+  without `grep --null`: coded, but neither CI nor this Mac takes those branches.
+  Both runners have GNU grep with `-P` and `--null`.
+- `--installed` sweep is not covered by CI (no skill dirs on a runner).
 
 ## Open items
 
-1. **Run CI.** Push a branch, watch Actions, fix what breaks. Nothing else should
-   ship before this.
-2. **Re-tag.** After CI is green, tag `v1.1.0` (or delete `v1.0.0` and re-cut it,
-   since nobody consumed it) with exit semantics matching the docs.
-3. **Go public again** when 1 and 2 are done. Jonathan has already approved
-   publishing — this is a timing hold, not a reversal.
+1. ~~Run CI~~ — **done, green.**
+2. **Re-tag.** `v1.0.0` still points at the old exit semantics (sub-HIGH returned 0).
+   Nobody consumed it — 0 stars, 0 forks — so either delete and re-cut it, or tag
+   `v1.1.0`. Must happen before public.
+3. **Go public again** when 2 is done. Jonathan has already approved publishing —
+   this is a timing hold, not a reversal.
+7. **Bump `actions/checkout@v4` → `v5`.** Node 20 deprecation warning on every run;
+   currently forced onto Node 24. Not breaking yet.
 4. **Enable private vulnerability reporting** in repo settings. `SECURITY.md` already
    points at it, so today it links to a feature that is off. Settings → Security.
 5. **Triage the sweep.** 14 CRITICAL / 7 HIGH installed skills in
