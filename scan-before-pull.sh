@@ -16,7 +16,7 @@
 # stays silent, because silence reads as safety.
 #
 # Usage:
-#   ./scan-before-pull.sh owner/repo [dest_dir] [--strict]
+#   ./scan-before-pull.sh owner/repo [dest_dir] [--advisory]
 #   ./scan-before-pull.sh --path /some/local/dir
 #   ./scan-before-pull.sh --installed [--min-severity MEDIUM|HIGH|CRITICAL]
 #
@@ -29,9 +29,9 @@
 # Exit codes:
 #   0  clean
 #   1  usage or preflight failure (a required engine is missing)
-#   2  HIGH/CRITICAL findings — ALWAYS, not only under --strict
+#   2  HIGH/CRITICAL findings
 #   3  scan incomplete (a check could not run, or output could not be written)
-#   4  --strict only: findings below HIGH
+#   4  findings below HIGH — still awaiting Tier 3 review (use --advisory for 0)
 #
 # License: MIT. See README.md for the engines this orchestrates.
 
@@ -40,11 +40,12 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 QUARANTINE="${SBP_QUARANTINE:-$SCRIPT_DIR/.quarantine}"
 SKILL_DIRS="${SBP_SKILL_DIRS:-$HOME/.claude/skills:$HOME/.agents/skills}"
-STRICT=0; MODE="repo"; REPO=""; DEST=""; TARGET=""; MIN_SEV="MEDIUM"
+STRICT=0; ADVISORY=0; MODE="repo"; REPO=""; DEST=""; TARGET=""; MIN_SEV="MEDIUM"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --strict)        STRICT=1; shift ;;
+    --strict)        STRICT=1; shift ;;   # now the default; accepted for compatibility
+    --advisory)      ADVISORY=1; shift ;;  # downgrade sub-HIGH findings to exit 0
     --installed)     MODE="installed"; shift ;;
     --path)          MODE="path"; TARGET="${2:-}"; shift 2 ;;
     --min-severity)  MIN_SEV="${2:-MEDIUM}"; shift 2 ;;
@@ -652,7 +653,10 @@ elif [[ "$TIER1_CLEAN" -eq 1 && "$N_FLAG" -eq 0 ]]; then
   echo "✓ Both engines zero findings, nothing flagged. Check dependencies, then install."
   exit 0
 else
-  echo "△ Findings below HIGH. $N_FLAG file(s) flagged → Tier 3."
-  [[ "$STRICT" -eq 1 ]] && exit 4
-  exit 0
+  # Findings below HIGH still exit NONZERO by default. Anything flagged is awaiting
+  # Tier 3 judgment, and `scan && install` must not proceed through unread findings.
+  # Advisory success is opt-in via --advisory, never the default.
+  echo "△ Findings below HIGH. $N_FLAG file(s) flagged → Tier 3 review required."
+  [[ "$ADVISORY" -eq 1 ]] && { echo "  (--advisory: returning 0 anyway)"; exit 0; }
+  exit 4
 fi

@@ -1,0 +1,104 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y shellcheck
+          # SC2181 (check exit code directly) is intentional here: several engines
+          # exit non-zero on FINDINGS, so status is captured and inspected, not tested.
+          shellcheck --severity=warning --exclude=SC2181 scan-before-pull.sh
+
+  fail-closed:
+    name: refuses to run without engines
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Missing engines must exit 1, not scan
+        run: |
+          # No engines installed on a bare runner. The single most important safety
+          # property is that this refuses rather than reporting a partial scan as
+          # clean. Asserted with zero dependencies, so it can never be skipped.
+          set +e
+          output="$(./scan-before-pull.sh SomeOwner/some-repo 2>&1)"
+          code=$?
+          set -e
+          echo "$output"
+          if [ "$code" -ne 1 ]; then
+            echo "FAIL: expected exit 1 when engines are missing, got $code"
+            exit 1
+          fi
+          echo "$output" | grep -q "Refusing to run a partial scan" || {
+            echo "FAIL: missing the refusal message"; exit 1; }
+          echo "OK: fails closed"
+
+  integration:
+    name: scans fixtures correctly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install engines
+        run: |
+          pipx install cisco-ai-skill-scanner
+          pipx install git+https://github.com/NVIDIA/skillspector.git
+          curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/scripts/install.sh \
+            | sh -s -- -b /usr/local/bin
+          skill-scanner --version && skillspector --version && gitleaks version
+
+      - name: Benign fixture is not flagged HIGH
+        run: |
+          set +e
+          SBP_OUTPUT_DIR="$RUNNER_TEMP" ./scan-before-pull.sh --path tests/fixtures/benign
+          code=$?
+          set -e
+          # 0 = clean, 4 = sub-HIGH findings still awaiting review. Both acceptable here.
+          # 2 (HIGH/CRITICAL) or 3 (incomplete) mean the verdict logic regressed.
+          if [ "$code" -eq 2 ] || [ "$code" -eq 3 ]; then
+            echo "FAIL: benign fixture returned $code"
+            cat "$RUNNER_TEMP"/benign-SCAN-REPORT.md || true
+            exit 1
+          fi
+          echo "OK: benign fixture exit $code"
+
+      - name: Suspicious fixture reaches the flagged list
+        run: |
+          set +e
+          SBP_OUTPUT_DIR="$RUNNER_TEMP" ./scan-before-pull.sh --path tests/fixtures/suspicious
+          code=$?
+          set -e
+          report="$RUNNER_TEMP/suspicious-SCAN-REPORT.md"
+          flagged="$RUNNER_TEMP/suspicious-flagged-files.nul"
+          # The regression that matters: a report demanding escalation while Tier 3
+          # says nothing was flagged. Findings must always reach the flagged list.
+          n=$(tr -dc '\0' < "$flagged" | wc -c | tr -d ' ')
+          if [ "${n:-0}" -lt 1 ]; then
+            echo "FAIL: suspicious fixture flagged nothing"
+            cat "$report" || true
+            exit 1
+          fi
+          grep -q "Nothing flagged" "$report" && {
+            echo "FAIL: report says 'Nothing flagged' but files were flagged"; exit 1; }
+          echo "OK: $n file(s) flagged, exit $code"
+
+      - name: Report must never claim clean while incomplete
+        run: |
+          report="$RUNNER_TEMP/suspicious-SCAN-REPORT.md"
+          if grep -q "Scan incomplete" "$report" && grep -q "Both engines returned zero findings" "$report"; then
+            echo "FAIL: report simultaneously incomplete and clean"
+            exit 1
+          fi
+          echo "OK: no contradictory verdict"

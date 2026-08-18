@@ -97,8 +97,8 @@ reports "clean," which is the most dangerous failure mode a security tool has.
 # sweep everything already installed
 ./scan-before-pull.sh --installed --min-severity HIGH
 
-# CI: non-zero exit on HIGH/CRITICAL
-./scan-before-pull.sh owner/repo --strict
+# treat sub-HIGH findings as advisory (exit 0 instead of 4)
+./scan-before-pull.sh owner/repo --advisory
 ```
 
 Config via environment:
@@ -162,13 +162,20 @@ Treat any score as a pointer to a line number, never as a verdict.
 |---|---|
 | `0` | both engines zero findings, nothing flagged |
 | `1` | usage error, or a required engine is missing (refuses to run) |
-| `2` | HIGH/CRITICAL findings — **always**, not only under `--strict` |
+| `2` | HIGH/CRITICAL findings |
 | `3` | scan incomplete: a check could not run, or output could not be written |
-| `4` | `--strict` only: findings below HIGH |
+| `4` | findings below HIGH — flagged files still awaiting Tier 3 review |
 
-`3` is the one people get wrong. An incomplete scan is not a pass. If the unicode
-sweep could not run, or an engine returned nothing parseable, or a manifest failed
-to parse, the result is **unknown** and the script says so.
+Two of these are commonly gotten wrong.
+
+`3` is not a pass. An incomplete scan is **unknown**: if the unicode sweep could not
+run, an engine returned nothing parseable, or a manifest failed to parse, the script
+says so rather than rounding down to clean.
+
+`4` is also not a pass. Anything flagged is awaiting judgment, so `scan && install`
+must not proceed through it. **Findings exit nonzero by default** — advisory success
+is opt-in with `--advisory`, never automatic. A tool whose default lets unread
+findings through is a tool that will eventually let something through.
 
 ## Threat model: the repo is scanning-hostile
 
