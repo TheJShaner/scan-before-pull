@@ -39,23 +39,36 @@ Tested on this machine, real runs, not assumed:
 
 ## Open items
 
-1. ~~Run CI~~ — **done, green.**
-2. **Re-tag.** `v1.0.0` still points at the old exit semantics (sub-HIGH returned 0).
-   Nobody consumed it — 0 stars, 0 forks — so either delete and re-cut it, or tag
-   `v1.1.0`. Must happen before public.
-3. **Go public again** when 2 is done. Jonathan has already approved publishing —
-   this is a timing hold, not a reversal.
-7. **Bump `actions/checkout@v4` → `v5`.** Node 20 deprecation warning on every run;
-   currently forced onto Node 24. Not breaking yet.
-4. **Enable private vulnerability reporting** in repo settings. `SECURITY.md` already
-   points at it, so today it links to a feature that is off. Settings → Security.
-5. **Triage the sweep.** 14 CRITICAL / 7 HIGH installed skills in
-   `~/HQ/DEV/ACTIVE/tools/INSTALLED-SKILL-SWEEP-20260817.md`. Almost certainly mostly
-   false positives (the top scorer is our own `cybersecurity` skill — 100/100, 101
-   issues, because it is made of attack patterns). Read-the-line work, not rip-it-out
-   work.
-6. **Branch protection**, so a PR to a security scanner can't be merged without the
-   ladder run on it.
+Nothing is required of Jonathan to hold the current state. The repo is private and
+stays private until someone changes it.
+
+**Before it can go public (both small):**
+
+1. **Re-cut the tag.** `v1.0.0` points at the old exit semantics, where sub-HIGH
+   findings returned 0. Current HEAD returns 4. Nobody consumed the tag — 0 stars,
+   0 forks, ~20 minutes public — so delete and re-cut it rather than shipping a
+   correction: `git tag -d v1.0.0 && git push origin :refs/tags/v1.0.0`, then
+   re-tag at HEAD.
+2. **Enable private vulnerability reporting.** Repo Settings → Security. `SECURITY.md`
+   already tells reporters to use it, so right now it points at a switched-off
+   feature. Requires a human in the web UI.
+
+Then flip public: `gh repo edit TheJShaner/scan-before-pull --visibility public
+--accept-visibility-change-consequences`. **Jonathan already approved publishing** —
+this was a timing hold, not a reversal. Do not re-litigate it.
+
+**Independent of publishing:**
+
+3. **Triage the sweep.** 14 CRITICAL / 7 HIGH in
+   `~/HQ/DEV/ACTIVE/tools/INSTALLED-SKILL-SWEEP-20260817.md`. Probably mostly false
+   positives — the top scorer is our own `cybersecurity` skill at 100/100 with 101
+   issues, because it is made of attack patterns. This is read-the-flagged-line work
+   (Tier 3/4), not rip-it-out work. More useful now than at scan time, since engine
+   findings route into the flagged list as of v1.0.0.
+4. **Branch protection**, so a PR to a security scanner cannot be merged without the
+   ladder run on it. `SECURITY.md` promises this; nothing enforces it yet.
+5. **Bump `actions/checkout@v4` → `v5`.** Node 20 deprecation warning on every run;
+   currently force-run on Node 24. Not breaking yet.
 
 ## Known-good facts worth not re-deriving
 
