@@ -115,9 +115,9 @@ unicode_sweep() { # $1 = dir; emits NUL-delimited paths
   case "$UNICODE_ENGINE" in
     grep)
       if [[ "$GREP_NULL" -eq 1 ]]; then
-        grep -rlP --null '[\x{E0000}-\x{E007F}\x{200B}\x{200C}\x{202E}]' "$1" --exclude-dir=.git 2>/dev/null
+        grep -rlPI --null '[\x{E0000}-\x{E007F}\x{200B}\x{200C}\x{202E}]' "$1" --exclude-dir=.git 2>/dev/null
       else
-        grep -rlP '[\x{E0000}-\x{E007F}\x{200B}\x{200C}\x{202E}]' "$1" --exclude-dir=.git 2>/dev/null | tr '\n' '\0'
+        grep -rlPI '[\x{E0000}-\x{E007F}\x{200B}\x{200C}\x{202E}]' "$1" --exclude-dir=.git 2>/dev/null | tr '\n' '\0'
       fi ;;
     perl|python)
       python3 - "$1" <<'PY'
@@ -128,6 +128,13 @@ for r,d,fs in os.walk(sys.argv[1]):
     for f in fs:
         p = os.path.join(r,f)
         try:
+            # Binary files are NOT text: decoding them with errors='ignore'
+            # turns random bytes into real codepoints, and some land on
+            # U+200B/200C/202E - every .mp4/.png then reads as "smuggling".
+            # Same NUL-byte heuristic grep -I uses. Fixed 2026-08-24.
+            with open(p, 'rb') as fh:
+                if b'\0' in fh.read(8192):
+                    continue
             if bad.search(open(p, encoding='utf-8', errors='ignore').read()):
                 sys.stdout.write(p + '\0')
         except Exception: pass
