@@ -1,6 +1,6 @@
 # STATUS — scan-before-pull
 
-**As of 2026-08-17.** Repo is **PRIVATE** at https://github.com/TheJShaner/scan-before-pull.
+**As of 2026-08-24.** Repo is **PRIVATE** at https://github.com/TheJShaner/scan-before-pull.
 Local copy at `~/HQ/DEV/ACTIVE/tools/scan-before-pull/` **is** the git repo — edits here
 are edits to the tool. Commit and push; do not fork a private copy elsewhere.
 
@@ -22,6 +22,26 @@ Tested on this machine, real runs, not assumed:
 - Refuses to `rm -rf` a caller-supplied destination (test dir with data survived).
 - Preflight refuses to run when an engine is missing.
 - Stale quarantine clone removed and re-cloned fresh on re-run.
+
+### Fixed 2026-08-24
+
+- **Tier 1e no longer reads binaries as text.** Files were decoded UTF-8 with
+  `errors='ignore'`, so random bytes became real codepoints — some landing on
+  U+200B/200C/202E. Any repo carrying media reported "invisible/bidi unicode
+  found," set `FAIL=1`, and exited `2` **while the report body still read "No
+  HIGH+ findings from either engine."** The exit code contradicted the report.
+  Caught on `InlitX/Obsidian-Dashboard-Gallery`: 5 "findings" were 4 mp4s and a
+  JPEG. Now skips a file whose first 8KB contains NUL (the `grep -I` heuristic);
+  `grep` branches got `-I`. Same repo now reports clean and exits `4`.
+  Verified detection preserved: a real zero-width char in a `.md` is still
+  caught, while identical bytes inside a `.mp4` are ignored.
+- **Engine versions are recorded and checkable.** Nothing tracked which ruleset
+  ran. skillspector shipped 2.9.3→2.9.6 in eight days; the 8/17 install was
+  current that day and stale the next, silently, for a week. Reports now stamp
+  all three versions, and `--check-engines` compares against upstream (exit 4
+  stale, exit 3 on failed lookup — never "current" by default).
+  Verified: `--check-engines` returns all-current at skill-scanner 2.0.13 /
+  skillspector 2.9.6 / gitleaks 8.30.1.
 
 - **CI is green** (run 32091851323 → fixed in the next push; all three jobs pass):
   shellcheck clean, the no-engines job confirms it refuses rather than partially

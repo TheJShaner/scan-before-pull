@@ -71,6 +71,40 @@ Using **two vendor-maintained engines rather than one** is the entire point. NVI
 Cisco built their rule sets independently. When both come back clean you have genuine
 corroboration; when they disagree you have a specific, cheap question to escalate.
 
+### Keeping them current — the ruleset IS the product
+
+Two of the three engines are **rule-based**. A stale install does not fail loudly; it
+returns confident-clean reports against last season's rules. That is the same *fails
+toward clean* failure this tool exists to prevent, arriving through the back door.
+
+This is not theoretical. SkillSpector shipped **four releases in eight days**:
+
+| version | published |
+|---|---|
+| 2.9.3 | 2026-08-11 |
+| 2.9.4 | 2026-08-13 |
+| 2.9.5 | 2026-08-15 |
+| 2.9.6 | 2026-08-18 |
+
+An install made on 8/17 was current that day and stale the next, silently, for a week.
+
+Two mitigations, both added 2026-08-24:
+
+- **Every report stamps the engine versions it ran**, so an old report is
+  self-evidently old rather than indistinguishable from a fresh one.
+- **`--check-engines`** compares installed versions against PyPI and GitHub. Exit `4`
+  if anything is behind, `3` if a lookup fails — a failed lookup never reports
+  "current." It is network-dependent, so it is opt-in rather than run on every scan.
+
+```
+$ ./scan-before-pull.sh --check-engines
+ENGINE           INSTALLED    LATEST       STATUS
+----------------------------------------------------------
+skill-scanner    2.0.13       2.0.13       current
+skillspector     2.9.6        2.9.6        current
+gitleaks         8.30.1       8.30.1       current
+```
+
 ## Install
 
 ```bash
@@ -99,6 +133,9 @@ reports "clean," which is the most dangerous failure mode a security tool has.
 
 # treat sub-HIGH findings as advisory (exit 0 instead of 4)
 ./scan-before-pull.sh owner/repo --advisory
+
+# are the detection engines still current? (run this weekly)
+./scan-before-pull.sh --check-engines
 ```
 
 Config via environment:

@@ -19,6 +19,15 @@
 #   ./scan-before-pull.sh owner/repo [dest_dir] [--advisory]
 #   ./scan-before-pull.sh --path /some/local/dir
 #   ./scan-before-pull.sh --installed [--min-severity MEDIUM|HIGH|CRITICAL]
+#   ./scan-before-pull.sh --check-engines
+#
+# Keeping the engines current:
+#   Two of the three engines are RULE-BASED — the ruleset is the product, so a
+#   stale install returns confident-clean reports against old rules. That is the
+#   same "fails toward clean" failure this tool exists to prevent. skillspector
+#   shipped four releases in eight days (2.9.3 -> 2.9.6, Aug 2026), so an install
+#   can go stale within a day. Every report stamps the engine versions it ran,
+#   and --check-engines compares them against upstream. Run it weekly.
 #
 # Config (env):
 #   SBP_QUARANTINE   staging dir for clones   (default: ./.quarantine)
@@ -32,6 +41,7 @@
 #   2  HIGH/CRITICAL findings
 #   3  scan incomplete (a check could not run, or output could not be written)
 #   4  findings below HIGH — still awaiting Tier 3 review (use --advisory for 0)
+#      (also: --check-engines returns 4 when an engine is behind upstream)
 #
 # License: MIT. See README.md for the engines this orchestrates.
 
