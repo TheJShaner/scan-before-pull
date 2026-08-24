@@ -49,6 +49,7 @@ while [[ $# -gt 0 ]]; do
     --installed)     MODE="installed"; shift ;;
     --path)          MODE="path"; TARGET="${2:-}"; shift 2 ;;
     --min-severity)  MIN_SEV="${2:-MEDIUM}"; shift 2 ;;
+    --check-engines) MODE="check-engines"; shift ;;  # compare installed engines against upstream
     -h|--help)       sed -n '2,36p' "$0"; exit 0 ;;
     *)               [[ -z "$REPO" ]] && REPO="$1" || DEST="$1"; shift ;;
   esac
@@ -80,6 +81,69 @@ if [[ ${#MISSING[@]} -gt 0 ]]; then
 Refusing to run a partial scan — a missing engine would read as "clean".
 EOF
   exit 1
+fi
+
+################################################################################
+# Engine versions. A rule-based engine IS its ruleset, so a stale install gives
+# confident-clean reports against last season's rules. Recorded in every report
+# so an old report is self-evidently old. Added 2026-08-24 after skillspector
+# went stale one day after install (2.9.5 -> 2.9.6) with no signal.
+################################################################################
+ver_of() { # $1 = binary; prints first semver found, or "unknown"
+  local v
+  v="$("$1" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+  [[ -n "$v" ]] && printf '%s' "$v" || printf 'unknown'
+}
+V_SKILLSCANNER="$(ver_of skill-scanner)"
+V_SKILLSPECTOR="$(ver_of skillspector)"
+V_GITLEAKS="$(ver_of gitleaks)"
+
+################################################################################
+# --check-engines — are the rulesets current?
+#
+# Two of the three engines are RULE-BASED: the ruleset is the product. A stale
+# install returns confident-clean reports against old rules, which is the same
+# "fails toward clean" failure this tool exists to prevent. skillspector shipped
+# 2.9.3/2.9.4/2.9.5/2.9.6 across eight days, so any install goes stale in about a
+# week. Network-dependent, so it is opt-in rather than run on every scan, and any
+# lookup that fails prints UNKNOWN rather than implying current.
+################################################################################
+if [[ "$MODE" == "check-engines" ]]; then
+  gh_latest() { # $1 = owner/repo
+    curl -fsSL --max-time 15 "https://api.github.com/repos/$1/releases/latest" 2>/dev/null \
+      | grep -oE '"tag_name"[^,]*' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1
+  }
+  pypi_latest() { # $1 = package
+    curl -fsSL --max-time 15 "https://pypi.org/pypi/$1/json" 2>/dev/null \
+      | python3 -c 'import sys,json;print(json.load(sys.stdin)["info"]["version"])' 2>/dev/null
+  }
+  STALE=0
+  printf '%-16s %-12s %-12s %s\n' ENGINE INSTALLED LATEST STATUS
+  printf '%s\n' "----------------------------------------------------------"
+  report_engine() { # $1=name $2=installed $3=latest
+    local st
+    if   [[ -z "$3" ]];        then st="UNKNOWN — lookup failed"; INCOMPLETE=$((INCOMPLETE+1))
+    elif [[ "$2" == "$3" ]];   then st="current"
+    else st="STALE — update available"; STALE=1
+    fi
+    printf '%-16s %-12s %-12s %s\n' "$1" "$2" "${3:-?}" "$st"
+  }
+  report_engine skill-scanner "$V_SKILLSCANNER" "$(pypi_latest cisco-ai-skill-scanner)"
+  report_engine skillspector  "$V_SKILLSPECTOR" "$(gh_latest NVIDIA/skillspector)"
+  report_engine gitleaks      "$V_GITLEAKS"     "$(gh_latest gitleaks/gitleaks)"
+  echo ""
+  if [[ "$STALE" -eq 1 ]]; then
+    cat <<'EOF'
+Update the stale ones:
+  skill-scanner  pip install --upgrade cisco-ai-skill-scanner
+  skillspector   uv tool install --force git+https://github.com/NVIDIA/skillspector.git
+  gitleaks       brew upgrade gitleaks
+EOF
+    exit 4
+  fi
+  [[ "$INCOMPLETE" -gt 0 ]] && exit 3
+  echo "All engines current."
+  exit 0
 fi
 
 ################################################################################
@@ -327,7 +391,7 @@ done
 {
 echo "# Scan Report: $(esc_md "$REPO")"
 echo "Date: $(date '+%Y-%m-%d %H:%M')  |  scan-before-pull v1.0.0"
-echo "Engines: skill-scanner (Cisco) + skillspector (NVIDIA) + gitleaks"
+echo "Engines: skill-scanner $V_SKILLSCANNER (Cisco) + skillspector $V_SKILLSPECTOR (NVIDIA) + gitleaks $V_GITLEAKS"
 [[ -n "$CLONED_SHA" ]] && echo "Scanned commit: \`$CLONED_SHA\`"
 echo ""
 
