@@ -478,8 +478,18 @@ else
     SP_JSON=$(skillspector scan "$(resolve "$DEST")" --no-llm --format json 2>/dev/null)
     echo ""
     echo "<details><summary>Issue detail</summary>"; echo ""; echo '```'
+    # Sort by severity OURSELVES rather than trusting emission order. skillspector
+    # currently emits HIGH-first, but that is undocumented and it ships every 2-3
+    # days; the day it changes, a head -N would silently hide HIGHs. And announce
+    # what was truncated - a silent cap reads as "that was everything".
+    SP_SHOWN=40
     printf '%s' "$SP_JSON" \
-      | jq -r '.issues[]? | "[\(.severity)] \(.id) \(.category) | \(.location.file // "?"):\(.location.start_line // "?") | \(.finding // "")"' 2>/dev/null | head -40
+      | jq -r --argjson n "$SP_SHOWN" '
+          def rank: {"CRITICAL":0,"HIGH":1,"MEDIUM":2,"LOW":3,"INFO":4}[.severity] // 5;
+          [.issues[]?] | sort_by(rank) | .[0:$n][]
+          | "[\(.severity)] \(.id) \(.category) | \(.location.file // "?"):\(.location.start_line // "?") | \(.finding // "")"' 2>/dev/null
+    SP_OMITTED=$(( SP_ISSUES > SP_SHOWN ? SP_ISSUES - SP_SHOWN : 0 ))
+    [[ "$SP_OMITTED" -gt 0 ]] && echo "... $SP_OMITTED more not shown (severity-sorted; all HIGH/CRITICAL appear above)"
     echo '```'; echo "</details>"
     # HIGH/CRITICAL locations must reach Tier 3, same as skill-scanner's.
     while IFS= read -r ff; do
