@@ -132,8 +132,12 @@ if [[ "$MODE" == "check-engines" ]]; then
   printf '%s\n' "----------------------------------------------------------"
   report_engine() { # $1=name $2=installed $3=latest
     local st
-    if   [[ -z "$3" ]];        then st="UNKNOWN — lookup failed"; INCOMPLETE=$((INCOMPLETE+1))
-    elif [[ "$2" == "$3" ]];   then st="current"
+    # An unreadable INSTALLED version is an incomplete comparison, not a stale
+    # engine — a changed --version format would otherwise read as "update
+    # available" and the suggested update would not fix it (Codex review, P2).
+    if   [[ -z "$3" ]];            then st="UNKNOWN — upstream lookup failed"; INCOMPLETE=$((INCOMPLETE+1))
+    elif [[ "$2" == "unknown" ]];  then st="UNKNOWN — could not read installed version"; INCOMPLETE=$((INCOMPLETE+1))
+    elif [[ "$2" == "$3" ]];       then st="current"
     else st="STALE — update available"; STALE=1
     fi
     printf '%-16s %-12s %-12s %s\n' "$1" "$2" "${3:-?}" "$st"
@@ -142,6 +146,14 @@ if [[ "$MODE" == "check-engines" ]]; then
   report_engine skillspector  "$V_SKILLSPECTOR" "$(gh_latest NVIDIA/skillspector)"
   report_engine gitleaks      "$V_GITLEAKS"     "$(gh_latest gitleaks/gitleaks)"
   echo ""
+  # INCOMPLETE outranks STALE: an unknown engine must not be reported as merely
+  # "update available", or automation leaves the unknown one unresolved (Codex
+  # review, P2). Exit 3 is the documented incomplete result.
+  if [[ "$INCOMPLETE" -gt 0 ]]; then
+    echo "One or more engines could not be compared — treat this as INCOMPLETE, not current."
+    [[ "$STALE" -eq 1 ]] && echo "(At least one other engine is also behind — see STALE rows above.)"
+    exit 3
+  fi
   if [[ "$STALE" -eq 1 ]]; then
     cat <<'EOF'
 Update the stale ones:
@@ -151,7 +163,6 @@ Update the stale ones:
 EOF
     exit 4
   fi
-  [[ "$INCOMPLETE" -gt 0 ]] && exit 3
   echo "All engines current."
   exit 0
 fi
@@ -167,11 +178,14 @@ resolve() {
     || printf '%s' "$1"
 }
 
-# PCRE, for the invisible-unicode sweep: grep -P → perl → python3.
+# Invisible-unicode sweep engine. python3 is PREFERRED, not the fallback: grep -I
+# decides binary-vs-text by looking for a NUL byte, and NUL is valid utf-8, so a
+# crafted text file can silence the sweep with one byte (Codex review, P1). The
+# python path uses a strict utf-8 decode instead, which a text file cannot fail.
+# grep is kept only for hosts without python3, and declares itself in the report.
 UNICODE_ENGINE="none"
-if echo x | grep -qP 'x' 2>/dev/null; then UNICODE_ENGINE="grep"
-elif need perl;                        then UNICODE_ENGINE="perl"
-elif need python3;                     then UNICODE_ENGINE="python"
+if   need python3;                     then UNICODE_ENGINE="python"
+elif echo x | grep -qP 'x' 2>/dev/null; then UNICODE_ENGINE="grep"
 fi
 
 # NUL-delimited grep output. NOTE: use --null, never -Z. On ugrep (common on macOS
@@ -203,13 +217,22 @@ for r,d,fs in os.walk(sys.argv[1]):
         p = os.path.join(r,f)
         try:
             # Binary files are NOT text: decoding them with errors='ignore'
-            # turns random bytes into real codepoints, and some land on
-            # U+200B/200C/202E - every .mp4/.png then reads as "smuggling".
-            # Same NUL-byte heuristic grep -I uses. Fixed 2026-08-24.
+            # turns random bytes into real codepoints, some landing on
+            # U+200B/200C/202E, so every .mp4/.png read as "smuggling".
+            #
+            # The discriminator is a STRICT utf-8 decode, deliberately NOT a
+            # NUL-byte check. NUL is valid utf-8 (U+0000), so a crafted text
+            # file cannot opt itself out of scanning by embedding one early -
+            # it still decodes, so it still gets scanned. Real binaries raise
+            # UnicodeDecodeError and are skipped. A NUL heuristic would let an
+            # attacker silence Tier 1e with a single byte (Codex review, P1).
             with open(p, 'rb') as fh:
-                if b'\0' in fh.read(8192):
-                    continue
-            if bad.search(open(p, encoding='utf-8', errors='ignore').read()):
+                raw = fh.read()
+            try:
+                text = raw.decode('utf-8')      # strict - no errors='ignore'
+            except UnicodeDecodeError:
+                continue                        # genuine binary
+            if bad.search(text):
                 sys.stdout.write(p + '\0')
         except Exception: pass
 PY
@@ -282,7 +305,7 @@ if [[ "$MODE" == "installed" ]]; then
   {
     echo "# Installed Skill Sweep — $(date '+%Y-%m-%d %H:%M')"
     echo ""
-    echo "Engine: skillspector (static, \`--no-llm\`)"
+    echo "Engine: skillspector $V_SKILLSPECTOR (static, \`--no-llm\`)"
     echo "Bases searched: $BASES_OK of $(echo "$SKILL_DIRS" | tr ':' '\n' | grep -c .)"
     echo "Targets: ${#TARGETS[@]} unique paths (immediate children, hidden included)"
     echo "Reporting at or above: **$MIN_SEV**"
@@ -489,7 +512,19 @@ else
           [.issues[]?] | sort_by(rank) | .[0:$n][]
           | "[\(.severity)] \(.id) \(.category) | \(.location.file // "?"):\(.location.start_line // "?") | \(.finding // "")"' 2>/dev/null
     SP_OMITTED=$(( SP_ISSUES > SP_SHOWN ? SP_ISSUES - SP_SHOWN : 0 ))
-    [[ "$SP_OMITTED" -gt 0 ]] && echo "... $SP_OMITTED more not shown (severity-sorted; all HIGH/CRITICAL appear above)"
+    # Sorting guarantees highest-severity FIRST, not that every HIGH fits the cap.
+    # Claiming "all HIGH/CRITICAL appear above" is false when there are >40 of
+    # them, which is exactly when it matters most (Codex review, P2). Count them
+    # and say plainly whether any were cut.
+    if [[ "$SP_OMITTED" -gt 0 ]]; then
+      SP_HI_TOTAL=$(printf '%s' "$SP_JSON" | jq -r '[.issues[]? | select(.severity=="HIGH" or .severity=="CRITICAL")] | length' 2>/dev/null)
+      SP_HI_TOTAL=${SP_HI_TOTAL:-0}
+      if [[ "$SP_HI_TOTAL" -gt "$SP_SHOWN" ]]; then
+        echo "... $SP_OMITTED more not shown (severity-sorted). ⚠ $SP_HI_TOTAL HIGH/CRITICAL exist and only $SP_SHOWN rows are shown — some HIGH/CRITICAL are NOT listed above."
+      else
+        echo "... $SP_OMITTED more not shown (severity-sorted; all $SP_HI_TOTAL HIGH/CRITICAL appear above)"
+      fi
+    fi
     echo '```'; echo "</details>"
     # HIGH/CRITICAL locations must reach Tier 3, same as skill-scanner's.
     while IFS= read -r ff; do

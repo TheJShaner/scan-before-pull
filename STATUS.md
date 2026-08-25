@@ -35,6 +35,19 @@ Tested on this machine, real runs, not assumed:
   `grep` branches got `-I`. Same repo now reports clean and exits `4`.
   Verified detection preserved: a real zero-width char in a `.md` is still
   caught, while identical bytes inside a `.mp4` are ignored.
+- **Codex review (2026-08-24) found 5 issues in the same-day changes; all fixed.**
+  The P1 was a regression introduced by the binary-skip fix itself: skipping any
+  file with a NUL in its first 8KB meant **a crafted text file could silence
+  Tier 1e with one byte**. Replaced with a strict utf-8 decode — NUL is valid
+  utf-8, so text still decodes and still gets scanned, while real binaries raise
+  UnicodeDecodeError and are skipped. `grep -I` has the same NUL flaw and cannot
+  be patched, so python3 is now the PREFERRED sweep engine and grep the fallback
+  (this also removes a branch listed under NOT verified). Verified: a file with
+  an early NUL and a zero-width payload later is now caught; a real .mp4 is not.
+  The four P2s — INCOMPLETE outranking STALE, an unreadable installed version
+  counting as incomplete rather than stale, version stamping in `--installed`
+  reports, and the truncation note no longer claiming all HIGH/CRITICAL survived
+  a 40-row cap — are fixed and verified (simulated unreadable version exits 3).
 - **Engine versions are recorded and checkable.** Nothing tracked which ruleset
   ran. skillspector shipped 2.9.3→2.9.6 in eight days; the 8/17 install was
   current that day and stale the next, silently, for a week. Reports now stamp
