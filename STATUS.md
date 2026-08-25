@@ -63,6 +63,22 @@ Tested on this machine, real runs, not assumed:
   two dead variables — which is the whole reason it exists.
 - Linux path now exercised on every push (ubuntu-latest), not just macOS.
 
+### OPEN — pick this up on fresh eyes (2026-08-24)
+
+**skillspector 2.9.6 escalates on binary files, and we cannot patch its engine.**
+On `InlitX/Obsidian-Dashboard-Gallery` it now returns `74/100 HIGH` driven entirely
+by `[HIGH] AE3 analysis-evasion` on four `.mp4`s and a JPEG. On **2.9.5 that repo had
+no HIGH from either engine** — so tonight's engine update *introduced* these. Same
+false-positive class Tier 1e was fixed for, one layer up.
+
+Our Tier 1e now handles this correctly: binary hits are listed, routed to Tier 3, and
+do NOT set FAIL. skillspector's do, so any media-carrying repo exits 2.
+
+Decision still owed (annotate vs suppress). Recommendation: **annotate, never suppress** —
+a payload can hide in a binary, and the README already argues findings get read, not
+muted. Proposed: when every HIGH/CRITICAL lands on binary/media files, say so in the
+Tier 1 consensus block so the verdict is legible rather than silently downgraded.
+
 ## NOT verified
 
 - Portability fallbacks for hosts without PCRE (`perl`/`python` unicode sweep) and

@@ -199,42 +199,62 @@ fi
 rm -rf "$_probe"
 [[ "$GREP_NULL" -eq 0 ]] && gap "grep lacks --null: filenames containing newlines may be mis-attributed"
 
-unicode_sweep() { # $1 = dir; emits NUL-delimited paths
+unicode_sweep() { # $1 = dir; emits NUL-delimited KIND<TAB>PATH records
   case "$UNICODE_ENGINE" in
     grep)
+      # grep -I decides binary by NUL byte, which a crafted text file can trip to
+      # skip itself. This branch only runs where python3 is absent; the report
+      # declares the weaker guarantee rather than implying parity.
       if [[ "$GREP_NULL" -eq 1 ]]; then
-        grep -rlPI --null '[\x{E0000}-\x{E007F}\x{200B}\x{200C}\x{202E}]' "$1" --exclude-dir=.git 2>/dev/null
+        grep -rlPI --null '[\x{E0000}-\x{E007F}\x{200B}\x{200C}\x{202E}]' "$1" --exclude-dir=.git 2>/dev/null \
+          | while IFS= read -r -d '' g; do printf 'TEXT\t%s\0' "$g"; done
       else
-        grep -rlPI '[\x{E0000}-\x{E007F}\x{200B}\x{200C}\x{202E}]' "$1" --exclude-dir=.git 2>/dev/null | tr '\n' '\0'
+        grep -rlPI '[\x{E0000}-\x{E007F}\x{200B}\x{200C}\x{202E}]' "$1" --exclude-dir=.git 2>/dev/null \
+          | while IFS= read -r g; do printf 'TEXT\t%s\0' "$g"; done
       fi ;;
     perl|python)
       python3 - "$1" <<'PY'
 import os,sys,re
-bad = re.compile('[\U000E0000-\U000E007F​‌‮]')
+bad = re.compile('[\U000E0000-\U000E007F\u200b\u200c\u202e]')
+
+# NOTHING IS EVER SKIPPED.
+#
+# Two prior attempts failed the same way. A NUL-byte check let an attacker
+# silence the sweep with one byte; a strict utf-8 decode let them do it with one
+# invalid byte. Any rule shaped "detect binary -> skip file" is a bypass with a
+# trigger, and the attacker controls the trigger.
+#
+# So: decode EVERY file with errors='replace' and search all of it. Undecodable
+# bytes become U+FFFD; nothing is discarded. Binary-vs-text is decided ONLY to
+# choose how a hit is REPORTED, never whether the file was read. A hostile file
+# that makes itself look binary still lands in the report - and a SKILL.md that
+# reads as binary is itself worth a human look.
+#
+# Reads are capped so a crafted multi-GB file cannot exhaust memory or stall the
+# scan; denial-of-scanning is in scope per SECURITY.md. A capped read that found
+# nothing reports PARTIAL rather than implying the whole file came back clean.
+CAP = 8 * 1024 * 1024
+
+def looks_binary(t):
+    if not t: return False
+    n = sum(1 for c in t if c == '\ufffd' or (ord(c) < 32 and c not in '\t\n\r'))
+    return (n / len(t)) > 0.10
+
 for r,d,fs in os.walk(sys.argv[1]):
     if '.git' in r.split(os.sep): continue
     for f in fs:
         p = os.path.join(r,f)
         try:
-            # Binary files are NOT text: decoding them with errors='ignore'
-            # turns random bytes into real codepoints, some landing on
-            # U+200B/200C/202E, so every .mp4/.png read as "smuggling".
-            #
-            # The discriminator is a STRICT utf-8 decode, deliberately NOT a
-            # NUL-byte check. NUL is valid utf-8 (U+0000), so a crafted text
-            # file cannot opt itself out of scanning by embedding one early -
-            # it still decodes, so it still gets scanned. Real binaries raise
-            # UnicodeDecodeError and are skipped. A NUL heuristic would let an
-            # attacker silence Tier 1e with a single byte (Codex review, P1).
-            with open(p, 'rb') as fh:
-                raw = fh.read()
-            try:
-                text = raw.decode('utf-8')      # strict - no errors='ignore'
-            except UnicodeDecodeError:
-                continue                        # genuine binary
+            with open(p,'rb') as fh:
+                raw = fh.read(CAP)
+                truncated = bool(fh.read(1))
+            text = raw.decode('utf-8', errors='replace')
             if bad.search(text):
-                sys.stdout.write(p + '\0')
-        except Exception: pass
+                sys.stdout.write(('BINARY' if looks_binary(text) else 'TEXT') + '\t' + p + '\0')
+            elif truncated:
+                sys.stdout.write('PARTIAL\t' + p + '\0')
+        except Exception:
+            sys.stdout.write('UNREADABLE\t' + p + '\0')
 PY
       ;;
   esac
@@ -517,9 +537,13 @@ else
     # them, which is exactly when it matters most (Codex review, P2). Count them
     # and say plainly whether any were cut.
     if [[ "$SP_OMITTED" -gt 0 ]]; then
-      SP_HI_TOTAL=$(printf '%s' "$SP_JSON" | jq -r '[.issues[]? | select(.severity=="HIGH" or .severity=="CRITICAL")] | length' 2>/dev/null)
-      SP_HI_TOTAL=${SP_HI_TOTAL:-0}
-      if [[ "$SP_HI_TOTAL" -gt "$SP_SHOWN" ]]; then
+      # A failed/unparseable rescan must NOT collapse to 0 — that would claim every
+      # HIGH/CRITICAL was shown when nothing was parsed (Codex review, P2).
+      SP_HI_TOTAL=$(printf '%s' "$SP_JSON" | jq -e -r '[.issues[]? | select(.severity=="HIGH" or .severity=="CRITICAL")] | length' 2>/dev/null) || SP_HI_TOTAL=""
+      if [[ -z "$SP_HI_TOTAL" ]]; then
+        echo "... $SP_OMITTED more not shown (severity-sorted). ⚠ Could not re-parse the detail scan, so whether any HIGH/CRITICAL were cut is UNKNOWN."
+        gap "skillspector detail rescan unparseable — truncation coverage unknown"
+      elif [[ "$SP_HI_TOTAL" -gt "$SP_SHOWN" ]]; then
         echo "... $SP_OMITTED more not shown (severity-sorted). ⚠ $SP_HI_TOTAL HIGH/CRITICAL exist and only $SP_SHOWN rows are shown — some HIGH/CRITICAL are NOT listed above."
       else
         echo "... $SP_OMITTED more not shown (severity-sorted; all $SP_HI_TOTAL HIGH/CRITICAL appear above)"
@@ -633,14 +657,52 @@ if [[ "$UNICODE_ENGINE" == "none" ]]; then
   gap "no PCRE engine — unicode smuggling sweep did not run"
   echo "**⚠ SKIPPED — no PCRE engine (need grep -P, perl, or python3). This is a GAP.**"
 else
-  HID_N=0
-  while IFS= read -r -d '' hf; do
-    HID_N=$((HID_N+1))
-    [[ "$HID_N" -eq 1 ]] && echo "**⚠ Invisible/bidi unicode found** (engine: $UNICODE_ENGINE):"
-    printf -- '- `%s`\n' "$(esc_md "${hf#$DEST/}")"
-    FLAG_ADD "$hf"
+  # Hits are bucketed by how the file reads, NOT by whether it was scanned -
+  # every file is always scanned. Only TEXT hits escalate; a compressed binary
+  # containing the same byte sequence by chance is reported without setting FAIL,
+  # because that was the original false-positive storm. Binary hits are still
+  # listed and still routed to Tier 3.
+  HID_T=0; HID_B=0; HID_P=0; HID_U=0
+  T_LIST=""; B_LIST=""; P_LIST=""; U_LIST=""
+  while IFS= read -r -d '' rec; do
+    kind="${rec%%$'\t'*}"; hf="${rec#*$'\t'}"
+    case "$kind" in
+      TEXT)   HID_T=$((HID_T+1)); T_LIST+="- \`$(esc_md "${hf#$DEST/}")\`"$'\n'; FLAG_ADD "$hf" ;;
+      BINARY) HID_B=$((HID_B+1)); B_LIST+="- \`$(esc_md "${hf#$DEST/}")\`"$'\n'; FLAG_ADD "$hf" ;;
+      PARTIAL)   HID_P=$((HID_P+1)); P_LIST+="- \`$(esc_md "${hf#$DEST/}")\`"$'\n' ;;
+      UNREADABLE) HID_U=$((HID_U+1)); U_LIST+="- \`$(esc_md "${hf#$DEST/}")\`"$'\n' ;;
+    esac
   done < <(unicode_sweep "$DEST")
-  if [[ "$HID_N" -gt 0 ]]; then FAIL=1; TIER1_CLEAN=0; else echo "clean (engine: $UNICODE_ENGINE)"; fi
+
+  if [[ "$HID_T" -gt 0 ]]; then
+    echo "**⚠ Invisible/bidi unicode in TEXT files** (engine: $UNICODE_ENGINE) — $HID_T:"
+    printf '%s' "$T_LIST"
+    FAIL=1; TIER1_CLEAN=0
+  fi
+  if [[ "$HID_B" -gt 0 ]]; then
+    echo ""
+    echo "Matched in $HID_B binary-looking file(s) — listed, NOT escalated. Compressed"
+    echo "media routinely contains these byte sequences by chance. Read one before"
+    echo "treating it as a finding; they are still routed to Tier 3."
+    printf '%s' "$B_LIST"
+  fi
+  if [[ "$HID_U" -gt 0 ]]; then
+    echo ""
+    echo "**⚠ $HID_U file(s) could not be read — UNKNOWN, not clean:**"
+    printf '%s' "$U_LIST"
+    gap "$HID_U file(s) unreadable during unicode sweep"
+  fi
+  if [[ "$HID_P" -gt 0 ]]; then
+    echo ""
+    echo "**$HID_P file(s) exceeded the 8MB read cap** — only the prefix was swept, so"
+    echo "the remainder is UNKNOWN rather than clean:"
+    printf '%s' "$P_LIST"
+    gap "$HID_P file(s) larger than the unicode-sweep read cap"
+  fi
+  if [[ "$HID_T" -eq 0 && "$HID_B" -eq 0 && "$HID_U" -eq 0 && "$HID_P" -eq 0 ]]; then
+    echo "clean (engine: $UNICODE_ENGINE)"
+  fi
+  [[ "$UNICODE_ENGINE" == "grep" ]] && echo "" && echo "_Note: the grep engine skips files containing a NUL byte, so a crafted text file can evade this tier. Install python3 for the stronger sweep._"
 fi
 
 ########################################
