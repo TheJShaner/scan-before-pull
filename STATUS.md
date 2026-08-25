@@ -79,6 +79,56 @@ a payload can hide in a binary, and the README already argues findings get read,
 muted. Proposed: when every HIGH/CRITICAL lands on binary/media files, say so in the
 Tier 1 consensus block so the verdict is legible rather than silently downgraded.
 
+### DRAFTED, NOT FILED — upstream issue to NVIDIA/skillspector
+
+Decision 2026-08-24: **file the issue, name this tool, do NOT link it, do NOT go public
+yet.** The mention is not a pitch — it is the true account of how the bug surfaced, and
+naming the tool is the whole value of saying it. One sentence, stated plainly, no ask. The link waits until the public gate below is met — pointing NVIDIA
+engineers at a scanner that has yielded a P1 on two consecutive review passes is the
+"fails before it is even public" outcome we are trying to avoid. Add the link as a
+follow-up comment once public. The wording works read now or read later.
+
+Repro (two files, deterministic):
+
+```bash
+mkdir -p /tmp/minimal
+printf -- '---\nname: demo\ndescription: minimal repro\n---\n\n# Demo\n' > /tmp/minimal/SKILL.md
+python3 -c "open('/tmp/minimal/screenshot.png','wb').write(b'\x89PNG\r\n\x1a\n'+bytes(range(256))*300)"
+skillspector scan /tmp/minimal --no-llm --format json
+# -> score 30, HIGH AE3 analysis-evasion on screenshot.png, MEDIUM AE4 on the same file
+```
+
+Draft body:
+
+> **AE3/AE4 fire HIGH on any binary asset in a skill directory**
+>
+> A skill containing a single PNG screenshot produces `HIGH AE3 analysis-evasion` and
+> `MEDIUM AE4`, both against the image itself.
+>
+> Minimal repro: a directory with a normal `SKILL.md` and one `.png` scores 30 with a
+> HIGH finding. (commands above)
+>
+> Real-world: `InlitX/Obsidian-Dashboard-Gallery` (four `.mp4` and a JPEG under
+> `images/`) scores **74/100 HIGH**, driven entirely by AE3/AE4 on media files. On
+> **2.9.5 that same repo produced no HIGH from the engine**, so this looks like a 2.9.6
+> regression rather than long-standing behaviour.
+>
+> Expected: documentation screenshots and demo videos should not read as analysis
+> evasion. Entropy is indistinguishable between compressed media and obfuscated
+> payloads, so file-type gating (or a severity downgrade for non-text assets) seems
+> closer to intent than a HIGH.
+>
+> Found while building `scan-before-pull`, a tiered pre-install scanner that runs
+> SkillSpector alongside skill-scanner and gitleaks and only escalates to a model when
+> the free engines disagree. Happy to send a PR if you have a preferred shape for the fix.
+
+Why an issue and not a PR: AE3 is their taxonomy. Whether the right fix is file-type
+gating, a severity downgrade, or magic-byte detection is a design call they own, and an
+outside PR to a detection ruleset risks fixing it against their intent. Offer the PR in
+the issue instead.
+
+Filing is an outward, public action under Jonathan's GitHub account — his to authorize.
+
 ## NOT verified
 
 - Portability fallbacks for hosts without PCRE (`perl`/`python` unicode sweep) and
