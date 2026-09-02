@@ -65,7 +65,7 @@ export PATH="$HOME/.local/bin:/Library/Frameworks/Python.framework/Versions/3.12
 
 The flagged list is **NUL-delimited**, because a filename can legitimately contain a
 newline and a line-oriented list lets a crafted name evict the real target. Read it
-with `xargs -0 -a <file>`, and pass it to a model as data — never interpolated into
+with `xargs -0 ... < <file>` (macOS xargs has no `-a`), and pass it to a model as data — never interpolated into
 prose. Filenames come from an untrusted repo and are untrusted text.
 
 ### Exit codes
