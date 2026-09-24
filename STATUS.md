@@ -168,6 +168,14 @@ this was a timing hold, not a reversal. Do not re-litigate it.
    ladder run on it. `SECURITY.md` promises this; nothing enforces it yet.
 5. **Bump `actions/checkout@v4` → `v5`.** Node 20 deprecation warning on every run;
    currently force-run on Node 24. Not breaking yet.
+6. **Gate 1 has no CVE check — known-vulnerable deps pass silently (found 2026-09-24,
+   Jonathan: "we will have to play with that later").** The dependency inventory only
+   says "feed this to Socket/OSV"; nothing runs it. Proof: `mvschwarz-openrig`
+   (downloaded 9/24) pins vitest 3.2.4 (GHSA-5xrq-8626-4rwp critical) and seroval 1.5.1
+   (GHSA-mv8w-475r-vwqw critical, runtime via @tanstack/router-core) — its SCAN-REPORT
+   never mentions either. Fix idea: run `socket scan create <dir> --report` (CLI already
+   authed, org `jsv`) and/or OSV in Gate 1; surface critical/high CVEs in the report and
+   exit code. Not started.
 
 ## Known-good facts worth not re-deriving
 
