@@ -1,6 +1,6 @@
 # STATUS — scan-before-pull
 
-**As of 2026-08-24.** Repo is **PRIVATE** at https://github.com/TheJShaner/scan-before-pull.
+**As of 2026-10-26.** Repo is **PUBLIC** at https://github.com/TheJShaner/scan-before-pull.
 Local copy at `~/HQ/DEV/ACTIVE/tools/scan-before-pull/` **is** the git repo — edits here
 are edits to the tool. Commit and push; do not fork a private copy elsewhere.
 
@@ -141,7 +141,12 @@ Filing is an outward, public action under Jonathan's GitHub account — his to a
 Nothing is required of Jonathan to hold the current state. The repo is private and
 stays private until someone changes it.
 
-**Before it can go public (both small):**
+**DONE 2026-10-26 — repo is PUBLIC.** `v1.0.0` re-cut at 3e8b338 (exit-4 semantics),
+private vulnerability reporting enabled via API, visibility flipped. Shared with
+AgriciDaniel (offered a star). Items 1–2 below are history. Next: link the repo in the
+NVIDIA/skillspector issue once filed.
+
+**Before it could go public (both small):**
 
 1. **Re-cut the tag.** `v1.0.0` points at the old exit semantics, where sub-HIGH
    findings returned 0. Current HEAD returns 4. Nobody consumed the tag — 0 stars,
