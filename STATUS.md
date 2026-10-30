@@ -1,6 +1,8 @@
 # STATUS — scan-before-pull
 
-**As of 2026-10-26.** Repo is **PUBLIC** at https://github.com/TheJShaner/scan-before-pull.
+**As of 2026-10-30 — v2.0.0 in progress (Trivy CVE engine), NOT pushed yet.** See `CHANGELOG.md`.
+
+**Previously, 2026-10-26.** Repo is **PUBLIC** at https://github.com/TheJShaner/scan-before-pull.
 Local copy at `~/HQ/DEV/ACTIVE/tools/scan-before-pull/` **is** the git repo — edits here
 are edits to the tool. Commit and push; do not fork a private copy elsewhere.
 
@@ -180,7 +182,10 @@ this was a timing hold, not a reversal. Do not re-litigate it.
    (GHSA-mv8w-475r-vwqw critical, runtime via @tanstack/router-core) — its SCAN-REPORT
    never mentions either. Fix idea: run `socket scan create <dir> --report` (CLI already
    authed, org `jsv`) and/or OSV in Gate 1; surface critical/high CVEs in the report and
-   exit code. Not started.
+   exit code. **DONE 2026-10-30 (v2.0.0, unpushed):** Trivy added as Tier 2b. Verified on
+   the same openrig clone: now reports CRITICAL=2 HIGH=29 (seroval, proxy-addr,
+   @modelcontextprotocol/sdk…) and exits 2. Socket is still the right tool for
+   malicious-package detection; Trivy covers known CVEs only.
 
 ## Known-good facts worth not re-deriving
 

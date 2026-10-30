@@ -44,7 +44,7 @@ ends at the exit code has skipped the part that does the actual work.
 |---|---|---|---|
 | **0** | free, <1s | triage — install hooks, network surface, size | inert by shape |
 | **1** | free, ~2s | two independent engines + gitleaks + unicode sweep + surface grep | **both engines clean → done** |
-| **2** | free | dependency list emitted for a supply-chain check | deps clean → done |
+| **2** | free | dependency list + **known-CVE check (Trivy)** across every lockfile | no HIGH+ CVEs → done |
 | **3** | cheap | a *cheaper model* reads only the flagged files | `CLEAN` verdict → done |
 | **4** | ~3k tokens | your *main model* reads only the one file Tier 3 called out | human decision |
 
@@ -66,6 +66,7 @@ built by people with far more threat data than you or I have:
 | [skill-scanner](https://pypi.org/project/cisco-ai-skill-scanner/) | Cisco AI Defense | see PyPI | behavioral dataflow analysis |
 | [agent-threat-rules](https://github.com/Agent-Threat-Rule/agent-threat-rules) | community | MIT | the rule corpus behind skill-scanner — "Sigma, but for AI agents" |
 | [gitleaks](https://github.com/gitleaks/gitleaks) | gitleaks | MIT | committed secrets |
+| [Trivy](https://github.com/aquasecurity/trivy) | Aqua Security | Apache-2.0 | known CVEs in locked dependency versions (npm, PyPI, Go, Rust, Ruby, PHP, Java…) — added v2.0.0 |
 
 Using **two vendor-maintained engines rather than one** is the entire point. NVIDIA and
 Cisco built their rule sets independently. When both come back clean you have genuine
@@ -73,7 +74,7 @@ corroboration; when they disagree you have a specific, cheap question to escalat
 
 ### Keeping them current — the ruleset IS the product
 
-Two of the three engines are **rule-based**. A stale install does not fail loudly; it
+Three of the four engines are **rule-based**, and the fourth (Trivy) is only as good as its CVE database. A stale install does not fail loudly; it
 returns confident-clean reports against last season's rules. That is the same *fails
 toward clean* failure this tool exists to prevent, arriving through the back door.
 
@@ -103,6 +104,7 @@ ENGINE           INSTALLED    LATEST       STATUS
 skill-scanner    2.0.13       2.0.13       current
 skillspector     2.9.6        2.9.6        current
 gitleaks         8.30.1       8.30.1       current
+trivy            0.76.1       0.76.1       current
 ```
 
 ## Install
@@ -110,7 +112,7 @@ gitleaks         8.30.1       8.30.1       current
 ```bash
 pip install cisco-ai-skill-scanner
 uv tool install git+https://github.com/NVIDIA/skillspector.git
-brew install gitleaks jq
+brew install gitleaks trivy jq
 
 git clone https://github.com/<you>/scan-before-pull.git
 chmod +x scan-before-pull/scan-before-pull.sh
@@ -144,6 +146,8 @@ Config via environment:
 |---|---|---|
 | `SBP_QUARANTINE` | `./.quarantine` | where repos are staged for scanning |
 | `SBP_SKILL_DIRS` | `~/.claude/skills:~/.agents/skills` | dirs swept by `--installed` |
+| `SBP_OUTPUT_DIR` | alongside the target | where reports are written |
+| `SBP_REVIEW_MODEL` | `gpt-5.6-sol` | model named in the printed Tier 3 command |
 
 ## Driving Tier 3 with a second CLI
 
@@ -199,7 +203,7 @@ Treat any score as a pointer to a line number, never as a verdict.
 |---|---|
 | `0` | both engines zero findings, nothing flagged |
 | `1` | usage error, or a required engine is missing (refuses to run) |
-| `2` | HIGH/CRITICAL findings |
+| `2` | HIGH/CRITICAL findings — from an engine, secrets, hidden unicode, **or a HIGH/CRITICAL CVE** |
 | `3` | scan incomplete: a check could not run, or output could not be written |
 | `4` | findings below HIGH — flagged files still awaiting Tier 3 review |
 
@@ -277,15 +281,32 @@ and falls back to perl, then python — and if none exist it reports the sweep a
 The theme: every one of these failed *toward* "clean." When you write security
 tooling, audit your error paths for which direction they fail in.
 
+## Troubleshooting — problems people actually hit
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Exit `1`, "Refusing to run a partial scan" | an engine is missing (v2.0.0 added `trivy`) | install what it lists; the script will not guess |
+| Exit `3` on a repo that looked fine | a check could not run — engine error, unparseable manifest, unreadable file | read the "Scan incomplete" section at the bottom of the report |
+| Exit `3`, Tier 2b "trivy did not run" | first Trivy run offline, or DB download blocked | run once with network; Trivy caches the DB in `~/Library/Caches/trivy` (macOS) |
+| First scan pauses ~10s | Trivy downloading its CVE DB | one-time, then refreshed every few hours |
+| Exit `2` on a clean-looking skill repo | Tier 2b found HIGH/CRITICAL CVEs in its lockfile | not malice — decline, or install and upgrade the listed packages |
+| Security-tool repos score 85–100 CRITICAL | they document attacks on purpose (`/etc/passwd`, `curl … \| sh` as examples) | expected; Tier 3 reads behavior, not keywords |
+| Exit `4` | sub-HIGH findings awaiting Tier 3 | not a pass; use `--advisory` only if you mean it |
+| `.quarantine/` keeps filling up | scans clone there; nothing moves them out | move cleared repos to their permanent home, delete rejected ones |
+
 ## Limitations
 
 - Static analysis only by default. A determined attacker who knows these engines can
   evade them; this raises the floor, it does not make you safe.
 - Tier 3/4 quality depends entirely on the model you point at it.
-- Only `npm`, `PyPI` (`requirements.txt`, `pyproject.toml`) manifests are parsed for
-  Tier 2. Go, Rust, Ruby, and others are detected by the engines but not extracted.
-- The supply-chain check is a handoff, not an integration — the script emits a list
-  and expects you to run it through Socket, OSV, or deps.dev.
+- The Tier 2 dependency *list* covers `npm` and `PyPI` manifests only. The Tier 2b CVE
+  check covers every ecosystem Trivy reads, but **only where a lockfile exists**: a bare
+  `package.json` or `requirements.txt` with ranges has no exact versions to match, and
+  the report says so rather than calling it clean.
+- A CVE is a known bug in a dependency version, not evidence the repo is malicious.
+  Malicious-package detection (typosquats, fresh hijacks) is still a handoff to Socket.
+- Trivy needs network on its first run (and every few hours) to refresh its CVE DB.
+  Offline with no DB = Tier 2b fails = exit `3`, by design.
 
 ## License
 

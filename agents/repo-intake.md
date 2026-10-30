@@ -25,7 +25,7 @@ The script refuses to run if any engine is missing, because a missing engine rea
 as a false all-clear. If it complains, report the missing tool to Jonathan — do not
 install it yourself without his explicit yes.
 
-Required on PATH: `skill-scanner`, `skillspector`, `gitleaks`, `jq`, `git`.
+Required on PATH: `skill-scanner`, `skillspector`, `gitleaks`, `trivy`, `jq`, `git`.
 
 Note the install locations, since they are not in every shell's default PATH:
 
@@ -59,6 +59,7 @@ export PATH="$HOME/.local/bin:/Library/Frameworks/Python.framework/Versions/3.12
 |---|---|---|
 | 0 | free | script — triage: install hooks, network surface |
 | 1 | free | script — skill-scanner + skillspector + gitleaks + unicode + grep |
+| 2 | free | script — dependency list + Trivy known-CVE check (HIGH/CRITICAL CVE → exit 2) |
 | 2 | free | you — `Socket depscore` on the emitted `*-dependencies.txt` |
 | 3 | pennies | you — read ONLY the files in `*-flagged-files.nul` |
 | 4 | ~3k tokens | Claude — reads ONLY the one file you called SUSPICIOUS |

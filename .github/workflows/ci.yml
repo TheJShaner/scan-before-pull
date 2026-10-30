@@ -60,7 +60,10 @@ jobs:
           GL_VER=8.30.1
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GL_VER}/gitleaks_${GL_VER}_linux_x64.tar.gz" \
             | sudo tar -xz -C /usr/local/bin gitleaks
-          skill-scanner --version && skillspector --version && gitleaks version
+          TV_VER=0.76.1
+          curl -sSfL "https://github.com/aquasecurity/trivy/releases/download/v${TV_VER}/trivy_${TV_VER}_Linux-64bit.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin trivy
+          skill-scanner --version && skillspector --version && gitleaks version && trivy --version
 
       - name: Benign fixture is not flagged HIGH
         run: |

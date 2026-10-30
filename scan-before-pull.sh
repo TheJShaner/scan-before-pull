@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scan-before-pull v1.0.0 — tiered pre-install scanner for AI agent skills and repos.
+# scan-before-pull v2.0.0 — tiered pre-install scanner for AI agent skills and repos.
 #
 # Thesis: run cheap checks always, expensive ones only when the cheap ones flag or
 # disagree. Two independent static engines agreeing costs nothing and is a stronger
@@ -7,7 +7,7 @@
 #
 #   Tier 0  free, <1s   triage — install hooks, network surface, size
 #   Tier 1  free, ~2s   two engines + secrets + unicode smuggling + surface grep
-#   Tier 2  free        dependency inventory for a supply-chain check
+#   Tier 2  free        dependency inventory + known-CVE check (Trivy)
 #   Tier 3  cheap       a cheaper model reads ONLY the flagged files
 #   Tier 4  ~3k tokens  your main model reads ONLY the one file Tier 3 called out
 #
@@ -22,7 +22,8 @@
 #   ./scan-before-pull.sh --check-engines
 #
 # Keeping the engines current:
-#   Two of the three engines are RULE-BASED — the ruleset is the product, so a
+#   Three of the four engines are RULE-BASED (Trivy is DATABASE-based, but the same
+#   logic applies: its CVE DB is the product) — the ruleset is the product, so a
 #   stale install returns confident-clean reports against old rules. That is the
 #   same "fails toward clean" failure this tool exists to prevent. skillspector
 #   shipped four releases in eight days (2.9.3 -> 2.9.6, Aug 2026), so an install
@@ -78,7 +79,7 @@ gap() { INCOMPLETE=1; GAPS+=("$1"); }
 # most dangerous failure a security tool has.
 ################################################################################
 MISSING=()
-for t in skill-scanner skillspector gitleaks jq git; do need "$t" || MISSING+=("$t"); done
+for t in skill-scanner skillspector gitleaks trivy jq git; do need "$t" || MISSING+=("$t"); done
 if [[ ${#MISSING[@]} -gt 0 ]]; then
   cat <<EOF
 ✗ Missing required tools: ${MISSING[*]}
@@ -86,6 +87,7 @@ if [[ ${#MISSING[@]} -gt 0 ]]; then
   skill-scanner  pip install cisco-ai-skill-scanner
   skillspector   uv tool install git+https://github.com/NVIDIA/skillspector.git
   gitleaks       brew install gitleaks
+  trivy          brew install trivy
   jq             brew install jq
 
 Refusing to run a partial scan — a missing engine would read as "clean".
@@ -107,6 +109,8 @@ ver_of() { # $1 = binary; prints first semver found, or "unknown"
 V_SKILLSCANNER="$(ver_of skill-scanner)"
 V_SKILLSPECTOR="$(ver_of skillspector)"
 V_GITLEAKS="$(ver_of gitleaks)"
+V_TRIVY="$(ver_of trivy)"
+SBP_VERSION="2.0.0"
 
 ################################################################################
 # --check-engines — are the rulesets current?
@@ -145,6 +149,7 @@ if [[ "$MODE" == "check-engines" ]]; then
   report_engine skill-scanner "$V_SKILLSCANNER" "$(pypi_latest cisco-ai-skill-scanner)"
   report_engine skillspector  "$V_SKILLSPECTOR" "$(gh_latest NVIDIA/skillspector)"
   report_engine gitleaks      "$V_GITLEAKS"     "$(gh_latest gitleaks/gitleaks)"
+  report_engine trivy         "$V_TRIVY"        "$(gh_latest aquasecurity/trivy)"
   echo ""
   # INCOMPLETE outranks STALE: an unknown engine must not be reported as merely
   # "update available", or automation leaves the unknown one unresolved (Codex
@@ -160,6 +165,7 @@ Update the stale ones:
   skill-scanner  pip install --upgrade cisco-ai-skill-scanner
   skillspector   uv tool install --force git+https://github.com/NVIDIA/skillspector.git
   gitleaks       brew upgrade gitleaks
+  trivy          brew upgrade trivy
 EOF
     exit 4
   fi
@@ -401,7 +407,7 @@ DEPLIST="$OUTBASE-dependencies.txt"
 FAIL=0; TIER1_CLEAN=1
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  scan-before-pull v1.0.0 — $REPO"
+echo "  scan-before-pull v$SBP_VERSION — $REPO"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 if [[ "$MODE" == "repo" ]]; then
@@ -443,8 +449,8 @@ done
 
 {
 echo "# Scan Report: $(esc_md "$REPO")"
-echo "Date: $(date '+%Y-%m-%d %H:%M')  |  scan-before-pull v1.0.0"
-echo "Engines: skill-scanner $V_SKILLSCANNER (Cisco) + skillspector $V_SKILLSPECTOR (NVIDIA) + gitleaks $V_GITLEAKS"
+echo "Date: $(date '+%Y-%m-%d %H:%M')  |  scan-before-pull v$SBP_VERSION"
+echo "Engines: skill-scanner $V_SKILLSCANNER (Cisco) + skillspector $V_SKILLSPECTOR (NVIDIA) + gitleaks $V_GITLEAKS + trivy $V_TRIVY (Aqua)"
 [[ -n "$CLONED_SHA" ]] && echo "Scanned commit: \`$CLONED_SHA\`"
 echo ""
 
@@ -741,8 +747,8 @@ echo "**$N_MANIFEST manifest(s), $N_DEP dependencies, $N_PARSE_ERR parse error(s
 [[ "$N_PARSE_ERR" -gt 0 ]] && gap "$N_PARSE_ERR dependency manifest(s) failed to parse"
 if [[ "$N_MANIFEST" -eq 0 ]]; then
   echo ""
-  echo "No npm/PyPI manifests found within 4 levels. Other ecosystems (Go, Rust, Ruby)"
-  echo "are not extracted here — check them yourself if present."
+  echo "No npm/PyPI manifests found within 4 levels. Other ecosystems (Go, Rust, Ruby,"
+  echo "PHP, Java) are not listed here, but Tier 2b checks their lockfiles for known CVEs."
 elif [[ "$N_DEP" -gt 0 ]]; then
   echo '```'; head -40 "$DEPLIST"; echo '```'
   echo "Feed this to a supply-chain checker (Socket, OSV, deps.dev). Unpinned versions"
@@ -752,6 +758,58 @@ else
   echo "Manifests present but declared no dependencies. If that seems wrong, a parser"
   echo "may have missed a format — verify by hand."
 fi
+
+########################################
+echo ""
+echo "## Tier 2b — known vulnerabilities (Trivy, free)"
+# Closes the gap where Gate 1 had no CVE check at all (openrig shipped a vulnerable
+# vitest/seroval through a clean scan, 2026-09). Trivy reads lockfiles for every
+# ecosystem it knows, not just npm/PyPI.
+#
+# Same self-suppression threat as gitleaks: Trivy loads trivy.yaml and .trivyignore
+# from the CURRENT directory, so run it from an empty temp dir with both disabled.
+# A repo must never get to choose which of its own CVEs are reported.
+#
+# Trivy exits 0 whether or not it finds anything (no --exit-code), so a nonzero
+# exit is a real failure. It also refreshes its CVE DB on run; an offline host
+# with no DB errors out, which lands here as a GAP rather than a clean.
+TV_TMP="$(mktemp -d)"
+TV_JSON=$(cd "$TV_TMP" && trivy fs --scanners vuln --format json --quiet \
+          --config "" --ignorefile "" --skip-version-check --disable-telemetry \
+          "$DEST" 2>"$TV_TMP/err"); TV_RC=$?
+if [[ "$TV_RC" -ne 0 ]] || ! printf '%s' "$TV_JSON" | jq -e '.SchemaVersion' >/dev/null 2>&1; then
+  gap "trivy failed to run (rc=$TV_RC)"
+  echo "**⚠ ENGINE ERROR — trivy did not run. UNKNOWN, not clean.**"
+  echo '```'; tail -5 "$TV_TMP/err" 2>/dev/null; echo '```'
+else
+  TV_TARGETS=$(printf '%s' "$TV_JSON" | jq -r '[.Results[]? | select(.Class=="lang-pkgs" or .Class=="os-pkgs")] | length' 2>/dev/null)
+  TV_COUNTS=$(printf '%s' "$TV_JSON" | jq -r '[.Results[]?.Vulnerabilities[]?.Severity] | group_by(.) | map("\(.[0])=\(length)") | join("  ")' 2>/dev/null)
+  echo "Lockfiles/package sets read: ${TV_TARGETS:-0}  |  CVEs: ${TV_COUNTS:-none}"
+  if [[ -n "$TV_COUNTS" ]]; then
+    TIER1_CLEAN=0   # any known CVE means "not clean"; only HIGH+ sets FAIL below
+    echo ""
+    echo '```'
+    printf '%s' "$TV_JSON" | jq -r '
+        def rank: {"CRITICAL":0,"HIGH":1,"MEDIUM":2,"LOW":3}[.Severity] // 4;
+        [.Results[]? as $r | $r.Vulnerabilities[]? | . + {t: $r.Target}] | sort_by(rank) | .[0:30][]
+        | "[\(.Severity)] \(.VulnerabilityID) \(.PkgName)@\(.InstalledVersion) -> \(.FixedVersion // "no fix") (\(.t))"' 2>/dev/null
+    echo '```'
+    if printf '%s' "$TV_COUNTS" | grep -qE 'HIGH|CRITICAL'; then
+      FAIL=1
+      echo "**⚠ HIGH/CRITICAL CVEs in declared dependency versions.** Not evidence of"
+      echo "malice — but installing pulls these versions in. Decline, or install and"
+      echo "upgrade the listed packages to their fixed versions."
+    fi
+  else
+    echo "clean"
+  fi
+  if [[ "${TV_TARGETS:-0}" -eq 0 && "$N_MANIFEST" -gt 0 ]]; then
+    echo ""
+    echo "_Manifests exist but no lockfile was found, so exact versions are unresolved and"
+    echo "Trivy could not match CVEs. This is a coverage limit, not a clean result._"
+  fi
+fi
+rm -rf "$TV_TMP"
 
 ########################################
 N_FLAG=$(FLAG_COUNT "$FLAGGED")
