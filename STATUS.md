@@ -6,7 +6,7 @@
 Local copy at `~/HQ/DEV/ACTIVE/tools/scan-before-pull/` **is** the git repo — edits here
 are edits to the tool. Commit and push; do not fork a private copy elsewhere.
 
-## Why private
+## History: why it was briefly pulled private (resolved — public since 2026-10-26)
 
 It was public for ~20 minutes (0 stars, 0 forks — nothing propagated). Pulled back
 because `v1.0.0` was tagged and then its exit-code semantics changed: sub-HIGH findings
@@ -140,8 +140,8 @@ Filing is an outward, public action under Jonathan's GitHub account — his to a
 
 ## Open items
 
-Nothing is required of Jonathan to hold the current state. The repo is private and
-stays private until someone changes it.
+Nothing is required of Jonathan to hold the current state. The repo is PUBLIC; v2.0.0
+is committed locally and NOT pushed until he says so.
 
 **DONE 2026-10-26 — repo is PUBLIC.** `v1.0.0` re-cut at 3e8b338 (exit-4 semantics),
 private vulnerability reporting enabled via API, visibility flipped. Shared with

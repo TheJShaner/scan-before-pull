@@ -27,6 +27,15 @@ with a HIGH or CRITICAL CVE.
 - Version string defined once (`SBP_VERSION`) instead of three hard-coded copies.
 - Tier 2 note no longer says Go/Rust/Ruby are unchecked; Tier 2b covers their lockfiles.
 
+- `agents/repo-intake.md`: absolute script path, exit `4` described as the default
+  (it still said "`--strict` only"), quarantine is the script's own `.quarantine/`,
+  full path to `snapshot-claude.sh`, and a note that Socket catches malicious packages
+  while Trivy only knows CVEs. Promoted to a live skill on Jonathan's machine, replacing
+  the retired `safe-install`. skill-forge validator: 100/100, 0 issues.
+- README Tier 3 example: the old one read a `flagged-files.txt` that no longer exists.
+  Now NUL-safe stdin, read-only sandbox, verdict written to a file.
+- STATUS: stale "repo is private" lines corrected.
+
 ### Not changed (on purpose)
 - CVE findings are not routed to the Tier 3 file list. A model reading a lockfile
   answers nothing; the decision is "upgrade or decline", which the report states.
