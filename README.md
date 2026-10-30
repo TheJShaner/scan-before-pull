@@ -68,6 +68,16 @@ built by people with far more threat data than you or I have:
 | [gitleaks](https://github.com/gitleaks/gitleaks) | gitleaks | MIT | committed secrets |
 | [Trivy](https://github.com/aquasecurity/trivy) | Aqua Security | Apache-2.0 | known CVEs in locked dependency versions (npm, PyPI, Go, Rust, Ruby, PHP, Java…) — added v2.0.0 |
 
+**Also in the ladder, not run by the script itself:**
+
+| Tool | By | Where | Role |
+|---|---|---|---|
+| [Socket](https://socket.dev) | Socket | Tier 2 (you run it) | malicious / typosquat / hijacked packages in the dependency list (CLI or MCP `depscore`); catches what Trivy can't, since Trivy only knows published CVEs |
+| [OSV](https://osv.dev) · [deps.dev](https://deps.dev) | Google | Tier 2 (alternative) | free vulnerability and package-health lookups |
+| [Codex CLI](https://github.com/openai/codex) | OpenAI | Tier 3 default | the cheaper model that reads only the flagged files; any CLI works |
+| Claude | Anthropic | Tier 4 | main model reads the one file Tier 3 called out |
+| [jq](https://jqlang.org) · git · python3 | community | everywhere | JSON parsing, safe clones, the unicode sweep |
+
 Using **two vendor-maintained engines rather than one** is the entire point. NVIDIA and
 Cisco built their rule sets independently. When both come back clean you have genuine
 corroboration; when they disagree you have a specific, cheap question to escalate.
@@ -325,6 +335,10 @@ The orchestrated tools carry their own licenses (linked above) and are neither
 vendored nor redistributed here; this script calls them as installed binaries.
 
 ## Credits
+
+Detection credit belongs to the engine authors: NVIDIA (SkillSpector), Cisco AI
+Defense and the agent-threat-rules community (skill-scanner), gitleaks, Aqua Security
+(Trivy), and Socket for supply-chain checks. This script only orchestrates them.
 
 Built by [Jonathan Shaner](https://github.com/TheJShaner) with Claude (Anthropic),
 out of a working repo-intake process: quarantine → scan → move → install with a
