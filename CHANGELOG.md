@@ -36,6 +36,17 @@ with a HIGH or CRITICAL CVE.
   Now NUL-safe stdin, read-only sandbox, verdict written to a file.
 - STATUS: stale "repo is private" lines corrected.
 
+### Fixed (2026-11-15, Claude)
+- **skillspector results no longer vanish on multi-skill repos.** skillspector prints
+  "Warning: Found N skills in this directory. Use --recursive ..." on STDOUT ahead of
+  its JSON. The raw output failed `jq`, so Tier 1b reported "ENGINE ERROR — UNKNOWN"
+  and exit `3` while the engine had in fact scored the repo. Caught on
+  `Jakeschincariol/day-trader-skill` (11 skills): reported UNKNOWN, real result
+  100/100 CRITICAL, 34 issues. New `spector_json()` drops everything before the JSON
+  object; both call sites (verdict and issue detail) use it. Same repo now exits `2`.
+  Verified: `benign` → exit 0 (unchanged); `suspicious` → exit 2 both before and after
+  this change (skill-scanner 2.3.2 now rates it HIGH — the "exit 4" below is stale).
+
 ### Not changed (on purpose)
 - CVE findings are not routed to the Tier 3 file list. A model reading a lockfile
   answers nothing; the decision is "upgrade or decline", which the report states.

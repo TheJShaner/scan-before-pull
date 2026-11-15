@@ -1,6 +1,13 @@
 # STATUS — scan-before-pull
 
-**As of 2026-10-30 — v2.0.0 in progress (Trivy CVE engine), NOT pushed yet.** See `CHANGELOG.md`.
+**As of 2026-11-15 — v2.0.0 in progress (Trivy CVE engine), NOT pushed yet (5 local commits ahead of origin).** See `CHANGELOG.md`.
+
+**2026-11-15 (Claude):** fixed Tier 1b reporting "engine failed / UNKNOWN" on any repo
+holding more than one skill — skillspector's "Found N skills" notice on stdout broke the
+JSON parse. Multi-skill repos scanned before this date that show "skillspector failed to
+run" got no skillspector verdict; re-scan them. **Fixture drift, not fixed:**
+`tests/fixtures/suspicious` now exits `2`, not `4` (skill-scanner 2.3.2 rates it HIGH);
+the "exit 4" lines below and in CHANGELOG are stale.
 
 **Previously, 2026-10-26.** Repo is **PUBLIC** at https://github.com/TheJShaner/scan-before-pull.
 Local copy at `~/HQ/DEV/ACTIVE/tools/scan-before-pull/` **is** the git repo — edits here

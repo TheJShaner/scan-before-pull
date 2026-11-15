@@ -272,9 +272,18 @@ PY
 # cannot distinguish "engine broke" from "engine worked and found problems" — and
 # reading a findings exit as a failure would flip a CRITICAL result to UNKNOWN.
 # Validity of the JSON is the only trustworthy signal here.
+#
+# skillspector prints notices on STDOUT ahead of the JSON (e.g. "Warning: Found
+# 11 skills in this directory. Use --recursive ..."). Parsed raw, that reads as
+# an engine failure and hides a real CRITICAL as UNKNOWN (found 2026-11-15 on
+# Jakeschincariol/day-trader-skill). Drop everything before the JSON object.
+spector_json() {
+  skillspector scan "$1" --no-llm --format json 2>/dev/null | sed -n '/^{/,$p'
+}
+
 spector_verdict() {
   local p out; p="$(resolve "$1")"
-  out="$(skillspector scan "$p" --no-llm --format json 2>/dev/null)"
+  out="$(spector_json "$p")"
   [[ -z "$out" ]] && { echo "ERR|ERR|ERR"; return 1; }
   printf '%s' "$out" | jq -e -r '"\(.risk_assessment.score // "ERR")|\(.risk_assessment.severity // "ERR")|\(.issues|length)"' 2>/dev/null \
     || { echo "ERR|ERR|ERR"; return 1; }
@@ -524,7 +533,7 @@ else
     TIER1_CLEAN=0
   fi
   if [[ "$SP_ISSUES" != "0" ]]; then
-    SP_JSON=$(skillspector scan "$(resolve "$DEST")" --no-llm --format json 2>/dev/null)
+    SP_JSON=$(spector_json "$(resolve "$DEST")")
     echo ""
     echo "<details><summary>Issue detail</summary>"; echo ""; echo '```'
     # Sort by severity OURSELVES rather than trusting emission order. skillspector
