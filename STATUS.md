@@ -1,6 +1,6 @@
 # STATUS — scan-before-pull
 
-**As of 2026-11-15 — v2.0.0 in progress (Trivy CVE engine), NOT pushed yet (5 local commits ahead of origin).** See `CHANGELOG.md`.
+**As of 2026-11-15 — v2.0.0 in progress (Trivy CVE engine), pushed to origin/main 2026-11-15 (through a044199).** See `CHANGELOG.md`.
 
 **2026-11-15 (Claude):** fixed Tier 1b reporting "engine failed / UNKNOWN" on any repo
 holding more than one skill — skillspector's "Found N skills" notice on stdout broke the
@@ -148,7 +148,7 @@ Filing is an outward, public action under Jonathan's GitHub account — his to a
 ## Open items
 
 Nothing is required of Jonathan to hold the current state. The repo is PUBLIC; v2.0.0
-is committed locally and NOT pushed until he says so.
+was pushed to `main` 2026-11-15 on his say-so (not tagged).
 
 **DONE 2026-10-26 — repo is PUBLIC.** `v1.0.0` re-cut at 3e8b338 (exit-4 semantics),
 private vulnerability reporting enabled via API, visibility flipped. Shared with
