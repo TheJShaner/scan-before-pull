@@ -1,6 +1,8 @@
 # STATUS — scan-before-pull
 
-**As of 2026-11-15 — v2.0.0 in progress (Trivy CVE engine), pushed to origin/main 2026-11-15 (through a044199).** See `CHANGELOG.md`.
+**As of 2026-11-24 — v2.1.0 (Claude Code): Socket now runs inside the script as Tier 2c; comment-only `requirements.txt` no longer forces exit 3; Tier 3 command no longer hardcodes a model. NEXT: tag v2.0.0/v2.1.0 is Jonathan's call (only `v1.0.0` is tagged). Known limit: Socket free-plan quota (100 units per lookup) can 429 after a few scans.** See `CHANGELOG.md`.
+
+**Previously, 2026-11-15 — v2.0.0 in progress (Trivy CVE engine), pushed to origin/main 2026-11-15 (through a044199).** See `CHANGELOG.md`.
 
 **2026-11-15 (Claude):** fixed Tier 1b reporting "engine failed / UNKNOWN" on any repo
 holding more than one skill — skillspector's "Found N skills" notice on stdout broke the

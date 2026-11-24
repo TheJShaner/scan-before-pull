@@ -67,12 +67,12 @@ built by people with far more threat data than you or I have:
 | [agent-threat-rules](https://github.com/Agent-Threat-Rule/agent-threat-rules) | community | MIT | the rule corpus behind skill-scanner — "Sigma, but for AI agents" |
 | [gitleaks](https://github.com/gitleaks/gitleaks) | gitleaks | MIT | committed secrets |
 | [Trivy](https://github.com/aquasecurity/trivy) | Aqua Security | Apache-2.0 | known CVEs in locked dependency versions (npm, PyPI, Go, Rust, Ruby, PHP, Java…) — added v2.0.0 |
+| [Socket CLI](https://socket.dev) | Socket | see socket.dev | Tier 2c: malicious / typosquat / hijacked packages in the npm + PyPI dependency list, which have no CVE for Trivy to match. Needs a free account (`socket login`); sends package names to Socket's API. Not installed or logged out = exit `3`, not a skip — added v2.1.0 |
 
 **Also in the ladder, not run by the script itself:**
 
 | Tool | By | Where | Role |
 |---|---|---|---|
-| [Socket](https://socket.dev) | Socket | Tier 2 (you run it) | malicious / typosquat / hijacked packages in the dependency list (CLI or MCP `depscore`); catches what Trivy can't, since Trivy only knows published CVEs |
 | [OSV](https://osv.dev) · [deps.dev](https://deps.dev) | Google | Tier 2 (alternative) | free vulnerability and package-health lookups |
 | [Codex CLI](https://github.com/openai/codex) | OpenAI | Tier 3 default | the cheaper model that reads only the flagged files; any CLI works |
 | Claude | Anthropic | Tier 4 | main model reads the one file Tier 3 called out |
@@ -157,7 +157,7 @@ Config via environment:
 | `SBP_QUARANTINE` | `./.quarantine` | where repos are staged for scanning |
 | `SBP_SKILL_DIRS` | `~/.claude/skills:~/.agents/skills` | dirs swept by `--installed` |
 | `SBP_OUTPUT_DIR` | alongside the target | where reports are written |
-| `SBP_REVIEW_MODEL` | `gpt-5.6-sol` | model named in the printed Tier 3 command |
+| `SBP_REVIEW_MODEL` | unset | model named in the printed Tier 3 command; unset = no `-m`, so the review CLI uses its own configured model |
 
 ## Driving Tier 3 with a second CLI
 
@@ -306,6 +306,9 @@ tooling, audit your error paths for which direction they fail in.
 |---|---|---|
 | Exit `1`, "Refusing to run a partial scan" | an engine is missing (v2.0.0 added `trivy`) | install what it lists; the script will not guess |
 | Exit `3` on a repo that looked fine | a check could not run — engine error, unparseable manifest, unreadable file | read the "Scan incomplete" section at the bottom of the report |
+| Exit `3`, Tier 2c "socket is not on PATH" | Socket CLI missing | `npm install -g socket`, then `socket login` |
+| Exit `3`, Tier 2c "socket did not return results" with `429` | free-plan API quota used up (each lookup costs 100 units) | wait, check `socket organization quota`, re-run |
+| Exit `3`, Tier 2c "unknown to Socket" | a declared package is not on the public registry | private package, typo, or dependency-confusion target — read the manifest |
 | Exit `3`, Tier 2b "trivy did not run" | first Trivy run offline, or DB download blocked | run once with network; Trivy caches the DB in `~/Library/Caches/trivy` (macOS) |
 | First scan pauses ~10s | Trivy downloading its CVE DB | one-time, then refreshed every few hours |
 | Exit `2` on a clean-looking skill repo | Tier 2b found HIGH/CRITICAL CVEs in its lockfile | not malice — decline, or install and upgrade the listed packages |
@@ -323,7 +326,8 @@ tooling, audit your error paths for which direction they fail in.
   `package.json` or `requirements.txt` with ranges has no exact versions to match, and
   the report says so rather than calling it clean.
 - A CVE is a known bug in a dependency version, not evidence the repo is malicious.
-  Malicious-package detection (typosquats, fresh hijacks) is still a handoff to Socket.
+  Malicious-package detection (typosquats, fresh hijacks) is Tier 2c (Socket), which
+  scores each package's latest release by name, not the exact version a lockfile pins.
 - Trivy needs network on its first run (and every few hours) to refresh its CVE DB.
   Offline with no DB = Tier 2b fails = exit `3`, by design.
 

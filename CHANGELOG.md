@@ -2,6 +2,43 @@
 
 Every change, why it was made, and what it breaks. Newest first.
 
+## 2.1.0 — 2026-11-24 (Claude Code)
+
+**Behaviour change:** the script now runs Socket itself (new **Tier 2c**). A machine
+without the `socket` CLI, or logged out, or out of API quota, now gets exit `3` (scan
+incomplete) on any repo that declares npm/PyPI dependencies. Repos with no dependencies
+are unaffected. A package with a critical or high Socket alert now exits `2`.
+
+### Added
+
+- **Tier 2c — malicious packages (Socket).** Runs `socket package shallow` over the
+  dependency list and reports the lowest supply-chain score, any critical/high alerts,
+  and any declared package Socket has never seen (private, typo, or dependency
+  confusion). Why: this was a "you run it" handoff, and on 2026-11-24 an agent skipped
+  it and reported a repo clean. A step nobody runs fails toward clean, same as a missing
+  engine. Not in preflight because it needs an account; absent is a gap, not a refusal.
+- Dependency names are validated before they become CLI arguments (a `package.json` key
+  like `--config=x` is refused and reported), and Socket runs from an empty temp dir.
+- Socket's version is stamped on the report's Engines line.
+
+### Fixed
+
+- **False "scan incomplete" on comment-only `requirements.txt`.** A file holding only
+  comments made `grep` exit 1, which was counted as a parse error and forced exit `3`.
+  Found on `tradermonty/claude-trading-skills`: 17 such files, 17 phantom parse errors.
+- Inline `# comments` in `requirements.txt` were glued onto the package name
+  (`manifoldbt#unpinned:floor…`). Stripped now.
+- The printed Tier 3 command hardcoded `-m gpt-5.6-sol`. A model id the local CLI does
+  not serve fails the whole review with an empty answer. `-m` is now printed only when
+  `SBP_REVIEW_MODEL` is set.
+
+### Known limits
+
+- Socket's free plan is quota-limited: each lookup call costs 100 units, so several
+  scans in a row can hit `429`. The report prints the reason and the scan exits `3`.
+- The Tier 3 flagged-file list holds absolute quarantine paths; after the repo is moved
+  to its permanent home those paths are dead. Run Tier 3 before the move.
+
 ## 2.0.0 — unreleased (2026-10-30)
 
 **Breaking:** `trivy` is now a required engine. Without it the script exits `1` and

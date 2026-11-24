@@ -27,6 +27,7 @@ as a false all-clear. If it complains, report the missing tool to Jonathan — d
 install it yourself without his explicit yes.
 
 Required on PATH: `skill-scanner`, `skillspector`, `gitleaks`, `trivy`, `jq`, `git`.
+`socket` is not preflight-required, but without it any repo with dependencies exits `3`.
 
 Note the install locations, since they are not in every shell's default PATH:
 
@@ -62,7 +63,7 @@ export PATH="$HOME/.local/bin:/Library/Frameworks/Python.framework/Versions/3.12
 | 0 | free | script — triage: install hooks, network surface |
 | 1 | free | script — skill-scanner + skillspector + gitleaks + unicode + grep |
 | 2 | free | script — dependency list + Trivy known-CVE check (HIGH/CRITICAL CVE → exit 2) |
-| 2 | free | you — Socket on the emitted `*-dependencies.txt` (catches malicious packages; Trivy only knows CVEs): `socket package shallow pypi <pkg> <pkg> ... --json --no-banner` (or `npm`), one row per artifact so group by name. Always run it; never skip. |
+| 2 | free | script (v2.1.0+) — Socket malicious-package check, Tier 2c. If it says SKIPPED or ENGINE ERROR the scan is exit `3`: fix it (`socket login`, or wait out a `429` quota) and re-run, or run by hand: `socket package shallow pypi <pkg> ... --json --no-banner` (or `npm`). Never report it as done when it did not run. |
 | 3 | pennies | you — read ONLY the files in `*-flagged-files.nul` |
 | 4 | ~3k tokens | Claude — reads ONLY the one file you called SUSPICIOUS |
 
