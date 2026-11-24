@@ -33,6 +33,7 @@ Note the install locations, since they are not in every shell's default PATH:
 ```
 skillspector    ~/.local/bin/skillspector
 skill-scanner   /Library/Frameworks/Python.framework/Versions/3.12/bin/skill-scanner
+socket          ~/.local/bin/socket   (CLI, already logged in. NOT an MCP tool; do not report it missing)
 ```
 
 If your shell cannot see them:
@@ -61,7 +62,7 @@ export PATH="$HOME/.local/bin:/Library/Frameworks/Python.framework/Versions/3.12
 | 0 | free | script — triage: install hooks, network surface |
 | 1 | free | script — skill-scanner + skillspector + gitleaks + unicode + grep |
 | 2 | free | script — dependency list + Trivy known-CVE check (HIGH/CRITICAL CVE → exit 2) |
-| 2 | free | you — `Socket depscore` on the emitted `*-dependencies.txt` (catches malicious packages; Trivy only knows CVEs) |
+| 2 | free | you — Socket on the emitted `*-dependencies.txt` (catches malicious packages; Trivy only knows CVEs): `socket package shallow pypi <pkg> <pkg> ... --json --no-banner` (or `npm`), one row per artifact so group by name. Always run it; never skip. |
 | 3 | pennies | you — read ONLY the files in `*-flagged-files.nul` |
 | 4 | ~3k tokens | Claude — reads ONLY the one file you called SUSPICIOUS |
 

@@ -9,6 +9,12 @@ refuses to scan, the same as any other missing engine. Verdicts can also change:
 repo that previously exited `0` or `4` now exits `2` if its lockfile pins a version
 with a HIGH or CRITICAL CVE.
 
+### Docs (2026-11-24, Claude Code)
+
+`agents/repo-intake.md`: Socket is a CLI at `~/.local/bin/socket`, not an MCP tool, and
+the Tier 2 row now carries the exact `socket package shallow` command. Why: an agent
+skipped the Socket step and reported the tool missing after only searching for an MCP.
+
 ### Added
 - **Tier 2b — known vulnerabilities (Trivy).** Reads lockfiles for every ecosystem
   Trivy supports, lists the worst 30 CVEs with the fixed version, and sets exit `2`
